@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "agent:loop": "node scripts/agent-loop.mjs"
+    "agent:loop": "node scripts/agent-loop.mjs",
+    "smoke": "node scripts/smoke-test.mjs"
   }
 }

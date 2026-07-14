@@ -30,6 +30,32 @@ The Cloudflare Worker only triggers jobs. Antigravity runs on your own machine t
 6. Recommended repository variable:
    - `AGENT_ALLOWED_ROOT`, for example `C:\Users\shrid\OneDrive\Documents\AI-Agent-Workspaces`
 
+## Local Smoke Test
+
+Run this from the automation repo before using Telegram:
+
+```bash
+npm run smoke
+```
+
+This only tests the local controller's safe stop path. It does not call Antigravity, GitHub, or Telegram.
+
+## First GitHub Actions Test
+
+After the self-hosted runner is online, manually run **Autonomous Agent** from GitHub's Actions tab with:
+
+```text
+command: stop
+target_repo: your-user/any-selected-repo
+workspace_path: C:\Users\shrid\OneDrive\Documents\AI-Agent-Workspaces\smoke
+prompt: Stop smoke test
+max_iterations: 5
+branch: agent-main
+agy_model: Gemini 3.1 Pro (High)
+```
+
+The job should create `.agent-stop` inside the workspace and exit without running Antigravity.
+
 ## Workflow Inputs
 
 The workflow file is `.github/workflows/autonomous-agent.yml`.
