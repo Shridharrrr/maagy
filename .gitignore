@@ -1,0 +1,5 @@
+.env
+.wrangler
+node_modules
+*.log
+.agent-stop

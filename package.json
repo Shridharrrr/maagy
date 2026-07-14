@@ -1,0 +1,9 @@
+{
+  "name": "maagy-autonomous-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "agent:loop": "node scripts/agent-loop.mjs"
+  }
+}

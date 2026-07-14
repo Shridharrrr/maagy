@@ -1,0 +1,15 @@
+name = "maagy-telegram-agent"
+main = "src/worker.js"
+compatibility_date = "2026-07-15"
+
+# Set these with `wrangler secret put`, not in this file:
+# TELEGRAM_BOT_TOKEN
+# TELEGRAM_ALLOWED_USER_ID
+# GITHUB_TOKEN
+#
+# Set these as Cloudflare Worker variables:
+# GITHUB_OWNER = "your-github-user"
+# GITHUB_REPO = "automation-repo-name"
+# GITHUB_WORKFLOW_FILE = "autonomous-agent.yml"
+# DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\AI-Agent-Workspaces\\default"
+# DEFAULT_TARGET_REPO = "your-github-user/target-repo"

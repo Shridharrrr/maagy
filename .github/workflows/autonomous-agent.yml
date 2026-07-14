@@ -1,0 +1,59 @@
+name: Autonomous Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "start or stop"
+        required: false
+        default: "start"
+      target_repo:
+        description: "GitHub repo as owner/repo or HTTPS URL"
+        required: true
+      workspace_path:
+        description: "Absolute path on the self-hosted runner"
+        required: true
+      prompt:
+        description: "Build or improvement prompt"
+        required: false
+        default: ""
+      max_iterations:
+        description: "Maximum agent loop iterations"
+        required: false
+        default: "5"
+      branch:
+        description: "Branch to push direct commits to"
+        required: false
+        default: "agent-main"
+      agy_model:
+        description: "Antigravity model display name"
+        required: false
+        default: "Gemini 3.1 Pro (High)"
+
+concurrency:
+  group: autonomous-agent-${{ inputs.target_repo }}-${{ inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  run-agent:
+    runs-on: self-hosted
+    timeout-minutes: 240
+    steps:
+      - name: Checkout automation
+        uses: actions/checkout@v4
+
+      - name: Run autonomous loop
+        shell: pwsh
+        env:
+          ACTION_COMMAND: ${{ inputs.command }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+          WORKSPACE_PATH: ${{ inputs.workspace_path }}
+          AGENT_PROMPT: ${{ inputs.prompt }}
+          MAX_ITERATIONS: ${{ inputs.max_iterations }}
+          TARGET_BRANCH: ${{ inputs.branch }}
+          AGY_MODEL: ${{ inputs.agy_model }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AGENT_ALLOWED_ROOT: ${{ vars.AGENT_ALLOWED_ROOT }}
+        run: node scripts/agent-loop.mjs
