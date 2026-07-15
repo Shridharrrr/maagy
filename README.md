@@ -1,87 +1,185 @@
 # Maagy Autonomous Agent
 
-Zero-cost control plane for starting an Antigravity CLI coding loop from Telegram.
+Telegram-controlled automation for running Antigravity CLI against Next.js repositories.
+
+The system receives commands from Telegram, dispatches a GitHub Actions workflow, runs Antigravity on a self-hosted runner, verifies the project, and pushes successful changes to `agent-main`.
 
 ## Architecture
 
 ```text
-Telegram
+Telegram Bot
   -> Cloudflare Worker
-  -> GitHub workflow_dispatch
-  -> GitHub self-hosted runner on your machine
+  -> GitHub Actions workflow_dispatch
+  -> self-hosted GitHub Actions runner
   -> Antigravity CLI
   -> Next.js verification
-  -> direct push to agent-main
+  -> git commit and push to agent-main
 ```
 
-The Cloudflare Worker only triggers jobs. Antigravity runs on your own machine through a self-hosted GitHub Actions runner, which lets it use your local Antigravity login and free quota.
+Antigravity runs on the local machine through the self-hosted runner. This allows the workflow to use the local `agy` installation, local authentication, and available Antigravity quota.
 
-## GitHub Setup
+## Repository Layout
 
-1. Push this automation project to GitHub.
-2. Add a self-hosted runner to that repo from GitHub: **Settings -> Actions -> Runners**.
-3. Install and start the runner on the same machine where `agy` is authenticated.
-4. Add repository secret `AGENT_GITHUB_TOKEN`.
-   - It needs permission to clone and push the target repos.
-   - Fine-grained PAT is best; grant only the repos you want.
-5. Optional repository secrets:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
-6. Recommended repository variable:
-   - `AGENT_ALLOWED_ROOT`, for example `C:\Users\shrid\OneDrive\Documents\AI-Agent-Workspaces`
+```text
+.github/workflows/autonomous-agent.yml   GitHub Actions workflow
+scripts/agent-loop.mjs                   Local controller executed by the runner
+scripts/smoke-test.mjs                   Safe local smoke test
+cloudflare-worker/src/worker.js          Telegram webhook Worker
+cloudflare-worker/wrangler.toml.example  Worker configuration template
+```
+
+## Requirements
+
+- Node.js available on the self-hosted runner.
+- Git available on the self-hosted runner.
+- Antigravity CLI available as `agy`.
+- A GitHub repository containing this automation project.
+- A GitHub self-hosted runner registered to the automation repository.
+- A Telegram bot token.
+- A Cloudflare account for the Worker.
+
+## GitHub Configuration
+
+Create a fine-grained GitHub token for the runner.
+
+Recommended permissions:
+
+```text
+Repository access: selected repositories only
+Contents: Read and write
+Actions: Read and write
+Metadata: Read-only
+```
+
+The token must include:
+
+- the automation repository, so workflows can run correctly;
+- each target repository the agent is allowed to clone and push to.
+
+Add this token to the automation repository:
+
+```text
+Settings -> Secrets and variables -> Actions -> Secrets
+Name: AGENT_GITHUB_TOKEN
+```
+
+Add the allowed workspace root:
+
+```text
+Settings -> Secrets and variables -> Actions -> Variables
+Name: AGENT_ALLOWED_ROOT
+Value: C:\Users\shrid\OneDrive\Documents\agent-space
+```
+
+All workflow `workspace_path` values must be inside `AGENT_ALLOWED_ROOT`.
 
 ## Local Smoke Test
 
-Run this from the automation repo before using Telegram:
+Run from the automation repository:
 
 ```bash
 npm run smoke
 ```
 
-This only tests the local controller's safe stop path. It does not call Antigravity, GitHub, or Telegram.
+This checks the controller's stop path. It does not call Antigravity, GitHub, or Telegram.
 
-## First GitHub Actions Test
+## GitHub Actions Smoke Test
 
-After the self-hosted runner is online, manually run **Autonomous Agent** from GitHub's Actions tab with:
+After the self-hosted runner is online, run the `Autonomous Agent` workflow manually:
 
 ```text
 command: stop
-target_repo: your-user/any-selected-repo
-workspace_path: C:\Users\shrid\OneDrive\Documents\AI-Agent-Workspaces\smoke
+target_repo: Shridharrrr/test1
+workspace_path: C:\Users\shrid\OneDrive\Documents\agent-space\smoke
 prompt: Stop smoke test
 max_iterations: 5
 branch: agent-main
 agy_model: Gemini 3.1 Pro (High)
 ```
 
-The job should create `.agent-stop` inside the workspace and exit without running Antigravity.
+Expected result:
+
+```text
+C:\Users\shrid\OneDrive\Documents\agent-space\smoke\.agent-stop
+```
 
 ## Workflow Inputs
 
-The workflow file is `.github/workflows/autonomous-agent.yml`.
+The workflow is defined in:
 
-Required:
+```text
+.github/workflows/autonomous-agent.yml
+```
 
-- `target_repo`: `owner/repo` or an HTTPS GitHub URL.
-- `workspace_path`: absolute folder path on your self-hosted runner.
+Supported `command` values:
 
-Optional:
+```text
+start
+stop
+models
+quota
+```
 
-- `prompt`: what to build or improve.
-- `max_iterations`: capped to 5 by the controller.
-- `branch`: defaults to `agent-main`.
-- `agy_model`: defaults to `Gemini 3.1 Pro (High)`.
+Required inputs:
+
+```text
+target_repo      GitHub repository as owner/repo or HTTPS URL
+workspace_path   Absolute path on the self-hosted runner
+```
+
+Optional inputs:
+
+```text
+prompt            Build or improvement prompt
+max_iterations    Maximum loop count, capped to 5
+branch            Target branch, defaults to agent-main
+agy_model         Antigravity model, defaults to Gemini 3.1 Pro (High)
+telegram_chat_id  Chat ID for progress messages
+```
+
+## Verification
+
+The controller verifies the project after each Antigravity run.
+
+It always runs:
+
+```bash
+npm install
+```
+
+It also runs these scripts when present in `package.json`:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+npm run test
+```
+
+A `build` script is required. If verification passes, the controller commits and pushes to the configured branch. If verification fails, the failure output is passed into the next Antigravity iteration until the run passes or reaches the iteration limit.
 
 ## Cloudflare Worker Setup
 
-1. Copy `cloudflare-worker/wrangler.toml.example` to `cloudflare-worker/wrangler.toml`.
-2. Fill Worker variables in `wrangler.toml` or the Cloudflare dashboard:
-   - `GITHUB_OWNER`
-   - `GITHUB_REPO`
-   - `GITHUB_WORKFLOW_FILE`
-   - `DEFAULT_WORKSPACE_PATH`
-   - `DEFAULT_TARGET_REPO`
-3. Add secrets:
+Copy the example config:
+
+```bash
+cp cloudflare-worker/wrangler.toml.example cloudflare-worker/wrangler.toml
+```
+
+Configure Worker variables:
+
+```toml
+[vars]
+GITHUB_OWNER = "Shridharrrr"
+GITHUB_REPO = "maagy"
+GITHUB_WORKFLOW_FILE = "autonomous-agent.yml"
+DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\agent-space\\telegram-run"
+DEFAULT_WORKSPACE_ROOT = "C:\\Users\\shrid\\OneDrive\\Documents\\agent-space"
+DEFAULT_TARGET_REPO = "Shridharrrr/test1"
+DEFAULT_AGY_MODEL = "Gemini 3.1 Pro (High)"
+```
+
+Add Worker secrets:
 
 ```bash
 wrangler secret put TELEGRAM_BOT_TOKEN
@@ -89,14 +187,14 @@ wrangler secret put TELEGRAM_ALLOWED_USER_ID
 wrangler secret put GITHUB_TOKEN
 ```
 
-4. Deploy:
+Deploy:
 
 ```bash
 cd cloudflare-worker
 wrangler deploy
 ```
 
-5. Set the Telegram webhook:
+Set the Telegram webhook:
 
 ```bash
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<worker-url>/telegram"
@@ -104,16 +202,121 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<w
 
 ## Telegram Commands
 
+Build with an explicit workspace:
+
 ```text
-/build owner/repo | C:\path\to\empty-folder | Build a polished Next.js SaaS dashboard
-/build owner/repo | Build a polished Next.js SaaS dashboard
-/build owner/repo | C:\path\to\folder | prompt | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
-/stop owner/repo | C:\path\to\folder
+/build Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1 | Improve the homepage and keep build passing
+```
+
+Build with the default stable workspace:
+
+```text
+/build Shridharrrr/test1 | Improve the homepage and keep build passing
+```
+
+When `DEFAULT_WORKSPACE_ROOT` is set, the short form derives a stable folder from the repository name. For example:
+
+```text
+Shridharrrr/test1
+```
+
+uses:
+
+```text
+C:\Users\shrid\OneDrive\Documents\agent-space\Shridharrrr-test1
+```
+
+Override model, iterations, or branch:
+
+```text
+/build Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1 | Add a pricing section | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
+```
+
+Stop a run:
+
+```text
+/stop Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1
+```
+
+Check recent workflow runs:
+
+```text
 /status
+```
+
+List Antigravity models from the self-hosted runner:
+
+```text
 /models
+```
+
+Probe quota support:
+
+```text
 /quota
 ```
 
-If the workspace has no project yet, the Antigravity prompt tells it to create a Next.js app. The controller then runs `npm install`, any available `lint`, `typecheck`, `build`, and `test` scripts, commits passing changes, and pushes them to `agent-main`.
+The current Antigravity CLI exposes model listing but does not expose exact quota usage through a CLI command. `/quota` reports that limitation and confirms whether the local CLI is reachable.
 
-`/status` is answered directly by the Cloudflare Worker from recent GitHub Actions runs. `/models` and `/quota` are dispatched to the self-hosted runner because they need your local Antigravity CLI. The current Antigravity CLI install exposes model listing, but not exact quota usage, so `/quota` reports that limitation and confirms local CLI access.
+## Progress Messages
+
+During a run, the controller sends Telegram updates for:
+
+- repository preparation;
+- each iteration;
+- Antigravity start and finish;
+- each verification command;
+- commit and push;
+- final completion or failure.
+
+## Workspace Behavior
+
+The first run against an empty workspace clones the target repository.
+
+Later runs against the same workspace reuse the existing clone:
+
+```text
+fetch origin
+checkout agent-main
+pull latest agent-main
+run Antigravity
+verify
+commit
+push
+```
+
+Use one workspace per target repository. Do not point different repositories at the same folder.
+
+## Safety Limits
+
+- Commands are accepted only from `TELEGRAM_ALLOWED_USER_ID`.
+- Workspaces must be inside `AGENT_ALLOWED_ROOT`.
+- Iterations are capped at 5.
+- The agent pushes to `agent-main` by default.
+- `.agent-stop` can be used to stop a workspace run.
+
+## Troubleshooting
+
+`Workspace must be inside AGENT_ALLOWED_ROOT`
+
+Use a `workspace_path` under the configured root.
+
+`Repository not found`
+
+Check that the target repository exists and that `AGENT_GITHUB_TOKEN` has access to it.
+
+Telegram command gets no reply
+
+Check the Worker URL, Telegram webhook, and Worker secrets:
+
+```bash
+wrangler secret list
+```
+
+GitHub workflow does not start
+
+Check that the Worker `GITHUB_TOKEN` can dispatch workflows in the automation repository and that `GITHUB_OWNER`, `GITHUB_REPO`, and `GITHUB_WORKFLOW_FILE` are correct.
+
+Runner stays queued
+
+Start the self-hosted runner on the local machine.

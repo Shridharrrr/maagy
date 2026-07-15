@@ -63,7 +63,7 @@ export default {
         const parts = parsePipeCommand(textValue.replace("/build", "").trim());
         const options = parseOptions(parts.slice(3));
         const targetRepo = parts[0] || env.DEFAULT_TARGET_REPO;
-        const workspacePath = parts.length >= 3 ? parts[1] : env.DEFAULT_WORKSPACE_PATH;
+        const workspacePath = parts.length >= 3 ? parts[1] : workspaceForRepo(env, targetRepo);
         const prompt = parts.length >= 3 ? parts[2] : parts[1] || "";
 
         if (!targetRepo || !workspacePath || !prompt) {
@@ -121,7 +121,7 @@ function clampIterations(value) {
 function withDefaults(env, chatId, inputs) {
   return {
     target_repo: inputs.target_repo || env.DEFAULT_TARGET_REPO,
-    workspace_path: inputs.workspace_path || env.DEFAULT_WORKSPACE_PATH,
+    workspace_path: inputs.workspace_path || workspaceForRepo(env, inputs.target_repo || env.DEFAULT_TARGET_REPO),
     prompt: inputs.prompt || "",
     max_iterations: inputs.max_iterations || "5",
     branch: inputs.branch || "agent-main",
@@ -129,6 +129,18 @@ function withDefaults(env, chatId, inputs) {
     telegram_chat_id: String(chatId),
     ...inputs
   };
+}
+
+function workspaceForRepo(env, repo) {
+  if (env.DEFAULT_WORKSPACE_ROOT && repo) {
+    const repoName = repo
+      .replace(/^https:\/\/github\.com\//, "")
+      .replace(/\.git$/, "")
+      .replace(/[^\w.-]+/g, "-");
+    return `${env.DEFAULT_WORKSPACE_ROOT}\\${repoName}`;
+  }
+
+  return env.DEFAULT_WORKSPACE_PATH;
 }
 
 async function dispatchWorkflow(env, inputs) {
@@ -205,7 +217,8 @@ function helpText() {
     "/models",
     "/quota",
     "",
-    "The agent pushes direct commits to agent-main and stops after checks pass or 5 iterations."
+    "The agent sends progress updates while it prepares, runs Antigravity, verifies, commits, and pushes.",
+    "It pushes direct commits to agent-main and stops after checks pass or 5 iterations."
   ].join("\n");
 }
 

@@ -48,8 +48,19 @@ async function main() {
   }
 
   if (existsSync(stopFile)) unlinkSync(stopFile);
-  await notify(`Starting autonomous agent for ${targetRepo} on ${targetBranch}`);
+  await notify(
+    [
+      "Agent run started",
+      `repo: ${targetRepo}`,
+      `branch: ${targetBranch}`,
+      `model: ${agyModel}`,
+      `workspace: ${workspacePath}`,
+      `max iterations: ${maxIterations}`
+    ].join("\n")
+  );
+  await notify("Preparing repository...");
   await prepareRepository();
+  await notify("Repository ready. Starting autonomous loop.");
 
   let lastVerification = "";
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
@@ -59,23 +70,42 @@ async function main() {
     }
 
     console.log(`\n=== Iteration ${iteration}/${maxIterations} ===`);
+    await notify(`Iteration ${iteration}/${maxIterations}: running Antigravity...`);
     await runAntigravity(iteration, lastVerification);
+    await notify(`Iteration ${iteration}/${maxIterations}: Antigravity finished. Running verification...`);
 
-    const verification = await verifyNextProject();
+    const verification = await verifyNextProject(iteration);
     lastVerification = verification.output.slice(-12000);
 
     if (verification.ok) {
+      await notify(`Iteration ${iteration}/${maxIterations}: checks passed. Committing and pushing...`);
       const committed = await commitAndPush(iteration);
       await notify(
         committed
-          ? `Iteration ${iteration} passed checks and pushed to ${targetBranch}.`
-          : `Iteration ${iteration} passed checks. No file changes to commit.`
+          ? [
+              "Agent run complete",
+              `iteration: ${iteration}/${maxIterations}`,
+              `result: checks passed and pushed to ${targetBranch}`,
+              `repo: ${targetRepo}`
+            ].join("\n")
+          : [
+              "Agent run complete",
+              `iteration: ${iteration}/${maxIterations}`,
+              "result: checks passed, no file changes to commit",
+              `repo: ${targetRepo}`
+            ].join("\n")
       );
       return;
     }
 
     console.log(lastVerification);
-    await notify(`Iteration ${iteration} failed checks. Continuing if budget remains.`);
+    await notify(
+      [
+        `Iteration ${iteration}/${maxIterations}: checks failed.`,
+        iteration < maxIterations ? "Continuing with failure output in the next prompt." : "No iterations remain.",
+        verification.summary ? `last check: ${verification.summary}` : ""
+      ].filter(Boolean).join("\n")
+    );
   }
 
   throw new Error(`Reached ${maxIterations} iterations without passing verification.`);
@@ -191,10 +221,10 @@ async function runAntigravity(iteration, lastVerification) {
   await run(agyCommand, args, { cwd: workspacePath });
 }
 
-async function verifyNextProject() {
+async function verifyNextProject(iteration) {
   const packageJsonPath = resolve(workspacePath, "package.json");
   if (!existsSync(packageJsonPath)) {
-    return { ok: false, output: "package.json was not created." };
+    return { ok: false, output: "package.json was not created.", summary: "missing package.json" };
   }
 
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
@@ -206,14 +236,20 @@ async function verifyNextProject() {
   }
 
   if (!scripts.build) {
-    return { ok: false, output: "package.json is missing a build script." };
+    return { ok: false, output: "package.json is missing a build script.", summary: "missing build script" };
   }
 
   let output = "";
   for (const [command, args] of commands) {
+    const label = `${command} ${args.join(" ")}`;
+    await notify(`Iteration ${iteration}/${maxIterations}: verifying \`${label}\`...`);
     const result = await run(command, args, { cwd: workspacePath, reject: false });
-    output += `\n$ ${command} ${args.join(" ")}\n${result.output}\n`;
-    if (result.code !== 0) return { ok: false, output };
+    output += `\n$ ${label}\n${result.output}\n`;
+    if (result.code !== 0) {
+      await notify(`Iteration ${iteration}/${maxIterations}: \`${label}\` failed.`);
+      return { ok: false, output, summary: `${label} failed` };
+    }
+    await notify(`Iteration ${iteration}/${maxIterations}: \`${label}\` passed.`);
   }
 
   return { ok: true, output };

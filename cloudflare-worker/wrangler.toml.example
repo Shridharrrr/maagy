@@ -15,4 +15,5 @@ preview_urls = true
 # GITHUB_REPO = "automation-repo-name"
 # GITHUB_WORKFLOW_FILE = "autonomous-agent.yml"
 # DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\AI-Agent-Workspaces\\default"
+# DEFAULT_WORKSPACE_ROOT = "C:\\Users\\shrid\\OneDrive\\Documents\\AI-Agent-Workspaces"
 # DEFAULT_TARGET_REPO = "your-github-user/target-repo"
