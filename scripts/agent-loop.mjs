@@ -218,11 +218,10 @@ async function exitsZero(command, args, cwd, mask = []) {
 function run(command, args, options = {}) {
   const cwd = options.cwd || process.cwd();
   const mask = options.mask || [];
-  const executable = process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
-  const useShell = process.platform === "win32" && executable.endsWith(".cmd");
+  const normalized = normalizeCommand(command, args);
 
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(executable, args, { cwd, shell: useShell });
+    const child = spawn(normalized.command, normalized.args, { cwd, shell: false });
     let output = "";
 
     const collect = (chunk) => {
@@ -246,6 +245,23 @@ function run(command, args, options = {}) {
       }
     });
   });
+}
+
+function normalizeCommand(command, args) {
+  if (process.platform === "win32" && command === "npm") {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/c", ["npm", ...args].map(quoteCmdArg).join(" ")]
+    };
+  }
+
+  return { command, args };
+}
+
+function quoteCmdArg(value) {
+  const text = String(value);
+  if (/^[\w:./-]+$/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 async function notify(message) {
