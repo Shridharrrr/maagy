@@ -31,6 +31,7 @@ main().catch(async (error) => {
   console.error(error.stack || error.message);
   await updateStatus({ state: "failed", step: "failed", last_verification: error.message });
   await notify(`Autonomous agent failed: ${error.message}`);
+  await cleanRemoteUrl();
   process.exit(1);
 });
 
@@ -132,6 +133,7 @@ async function main() {
               `repo: ${targetRepo}`
             ].join("\n")
       );
+      await cleanRemoteUrl();
       return;
     }
 
@@ -224,6 +226,12 @@ function buildCloneUrl(repo) {
 function addToken(url) {
   if (!env.GITHUB_TOKEN || !url.startsWith("https://github.com/")) return url;
   return url.replace("https://github.com/", `https://x-access-token:${env.GITHUB_TOKEN}@github.com/`);
+}
+
+function cleanRepoUrl(repo) {
+  if (repo.startsWith("https://github.com/")) return repo;
+  if (/^[\w.-]+\/[\w.-]+$/.test(repo)) return `https://github.com/${repo}.git`;
+  return repo;
 }
 
 async function runAntigravity(iteration, lastVerification) {
@@ -336,7 +344,13 @@ async function commitAndPush(iteration) {
   await run("git", ["add", "-A"], { cwd: workspacePath });
   await run("git", ["commit", "-m", `agent: autonomous iteration ${iteration}`], { cwd: workspacePath });
   await run("git", ["push", "-u", "origin", targetBranch], { cwd: workspacePath, mask: [env.GITHUB_TOKEN] });
+  await cleanRemoteUrl();
   return true;
+}
+
+async function cleanRemoteUrl() {
+  if (!existsSync(resolve(workspacePath, ".git"))) return;
+  await run("git", ["remote", "set-url", "origin", cleanRepoUrl(targetRepo)], { cwd: workspacePath, reject: false });
 }
 
 async function exitsZero(command, args, cwd, mask = []) {
@@ -389,7 +403,7 @@ function normalizeCommand(command, args) {
 
 function quoteCmdArg(value) {
   const text = String(value);
-  if (/^[\w:./-]+$/.test(text)) return text;
+  if (/^[\w:./@\\-]+$/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
