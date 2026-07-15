@@ -103,8 +103,19 @@ async function main() {
     const changed = await hasWorkingTreeChanges();
     if (!changed) {
       const message = "Antigravity completed without modifying files. No commit will be created.";
+      lastVerification = [
+        message,
+        "The previous pass only inspected or described work. In the next pass, edit the project files directly.",
+        "Make a concrete implementation change that satisfies the user request before returning."
+      ].join("\n");
       await updateStatus({ iteration, step: "no file changes", last_verification: message });
-      throw new Error(message);
+      await notify(
+        [
+          `Iteration ${iteration}/${maxIterations}: no files changed.`,
+          iteration < maxIterations ? "Retrying with a stricter edit instruction." : "No iterations remain."
+        ].join("\n")
+      );
+      continue;
     }
 
     await updateStatus({ iteration, step: "running verification" });
