@@ -28,6 +28,25 @@ async function main() {
     return;
   }
 
+  if (actionCommand === "models") {
+    const models = await run(agyCommand, ["models"], { cwd: workspacePath, reject: false });
+    await notify(models.code === 0 ? `Available Antigravity models:\n${models.output.trim()}` : `Could not read models:\n${models.output.trim()}`);
+    return;
+  }
+
+  if (actionCommand === "quota") {
+    const models = await run(agyCommand, ["models"], { cwd: workspacePath, reject: false });
+    await notify(
+      [
+        "Antigravity CLI does not currently expose a quota/usage command in this install.",
+        "You can check quota in the Antigravity UI/account surface.",
+        "",
+        models.code === 0 ? `CLI is authenticated enough to list models:\n${models.output.trim()}` : `Model probe failed:\n${models.output.trim()}`
+      ].join("\n")
+    );
+    return;
+  }
+
   if (existsSync(stopFile)) unlinkSync(stopFile);
   await notify(`Starting autonomous agent for ${targetRepo} on ${targetBranch}`);
   await prepareRepository();

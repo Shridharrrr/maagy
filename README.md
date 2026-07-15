@@ -107,7 +107,13 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<w
 ```text
 /build owner/repo | C:\path\to\empty-folder | Build a polished Next.js SaaS dashboard
 /build owner/repo | Build a polished Next.js SaaS dashboard
+/build owner/repo | C:\path\to\folder | prompt | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
 /stop owner/repo | C:\path\to\folder
+/status
+/models
+/quota
 ```
 
 If the workspace has no project yet, the Antigravity prompt tells it to create a Next.js app. The controller then runs `npm install`, any available `lint`, `typecheck`, `build`, and `test` scripts, commits passing changes, and pushes them to `agent-main`.
+
+`/status` is answered directly by the Cloudflare Worker from recent GitHub Actions runs. `/models` and `/quota` are dispatched to the self-hosted runner because they need your local Antigravity CLI. The current Antigravity CLI install exposes model listing, but not exact quota usage, so `/quota` reports that limitation and confirms local CLI access.

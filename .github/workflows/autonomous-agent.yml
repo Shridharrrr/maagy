@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       command:
-        description: "start or stop"
+        description: "start, stop, models, or quota"
         required: false
         default: "start"
       target_repo:
@@ -29,6 +29,10 @@ on:
         description: "Antigravity model display name"
         required: false
         default: "Gemini 3.1 Pro (High)"
+      telegram_chat_id:
+        description: "Telegram chat id for run notifications"
+        required: false
+        default: ""
 
 concurrency:
   group: autonomous-agent-${{ inputs.target_repo }}-${{ inputs.branch }}
@@ -54,6 +58,6 @@ jobs:
           AGY_MODEL: ${{ inputs.agy_model }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id || secrets.TELEGRAM_CHAT_ID }}
           AGENT_ALLOWED_ROOT: ${{ vars.AGENT_ALLOWED_ROOT }}
         run: node scripts/agent-loop.mjs
