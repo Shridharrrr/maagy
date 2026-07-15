@@ -100,6 +100,13 @@ async function main() {
     await updateStatus({ iteration, step: "running Antigravity" });
     await notify(`Iteration ${iteration}/${maxIterations}: running Antigravity...`);
     await runAntigravity(iteration, lastVerification);
+    const changed = await hasWorkingTreeChanges();
+    if (!changed) {
+      const message = "Antigravity completed without modifying files. No commit will be created.";
+      await updateStatus({ iteration, step: "no file changes", last_verification: message });
+      throw new Error(message);
+    }
+
     await updateStatus({ iteration, step: "running verification" });
     await notify(`Iteration ${iteration}/${maxIterations}: Antigravity finished. Running verification...`);
 
@@ -245,6 +252,7 @@ async function runAntigravity(iteration, lastVerification) {
     "- Prefer TypeScript, App Router, accessible UI, responsive layout, and clean scripts.",
     "- Keep the project installable with npm.",
     "- Do not push or commit; the controller will verify and push.",
+    "- You must modify files to satisfy the user request. Do not only describe intended edits.",
     "- Treat passing install/build/lint/test checks as the definition of done.",
     "",
     lastVerification ? `Previous verification output to fix:\n${lastVerification}` : "This is the first iteration.",
@@ -338,14 +346,18 @@ async function verifyNextProject(iteration) {
 }
 
 async function commitAndPush(iteration) {
-  const status = await run("git", ["status", "--porcelain"], { cwd: workspacePath, reject: false });
-  if (!status.output.trim()) return false;
+  if (!(await hasWorkingTreeChanges())) return false;
 
   await run("git", ["add", "-A"], { cwd: workspacePath });
   await run("git", ["commit", "-m", `agent: autonomous iteration ${iteration}`], { cwd: workspacePath });
   await run("git", ["push", "-u", "origin", targetBranch], { cwd: workspacePath, mask: [env.GITHUB_TOKEN] });
   await cleanRemoteUrl();
   return true;
+}
+
+async function hasWorkingTreeChanges() {
+  const status = await run("git", ["status", "--porcelain"], { cwd: workspacePath, reject: false });
+  return Boolean(status.output.trim());
 }
 
 async function cleanRemoteUrl() {
@@ -449,7 +461,7 @@ async function captureAndSendScreenshot() {
     await run("npx", ["-y", "playwright@latest", "install", "chromium"], { cwd: workspacePath, reject: false });
     const result = await run(
       "npx",
-      ["-y", "playwright@latest", "screenshot", "--browser=chromium", "--wait-for-timeout=1000", `http://127.0.0.1:${port}`, screenshotPath],
+      ["-y", "playwright@latest", "screenshot", `http://127.0.0.1:${port}`, screenshotPath],
       { cwd: workspacePath, reject: false }
     );
 
