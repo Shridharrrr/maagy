@@ -219,9 +219,10 @@ function run(command, args, options = {}) {
   const cwd = options.cwd || process.cwd();
   const mask = options.mask || [];
   const executable = process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+  const useShell = process.platform === "win32" && executable.endsWith(".cmd");
 
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(executable, args, { cwd, shell: false });
+    const child = spawn(executable, args, { cwd, shell: useShell });
     let output = "";
 
     const collect = (chunk) => {
