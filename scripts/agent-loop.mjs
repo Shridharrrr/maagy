@@ -11,9 +11,24 @@ const agyCommand = env.AGY_COMMAND || "agy";
 const agyModel = env.AGY_MODEL || "Gemini 3.1 Pro (High)";
 const actionCommand = (env.ACTION_COMMAND || "start").toLowerCase();
 const stopFile = resolve(workspacePath, ".agent-stop");
+const runId = env.GITHUB_RUN_ID || `${Date.now()}`;
+const runState = {
+  run_id: runId,
+  state: "starting",
+  repo: targetRepo,
+  branch: targetBranch,
+  model: agyModel,
+  workspace: workspacePath,
+  iteration: 0,
+  max_iterations: maxIterations,
+  step: "starting",
+  last_verification: "none",
+  workflow_url: workflowUrl()
+};
 
 main().catch(async (error) => {
   console.error(error.stack || error.message);
+  await updateStatus({ state: "failed", step: "failed", last_verification: error.message });
   await notify(`Autonomous agent failed: ${error.message}`);
   process.exit(1);
 });
@@ -24,18 +39,23 @@ async function main() {
 
   if (actionCommand === "stop") {
     writeFileSync(stopFile, `Stop requested at ${new Date().toISOString()}\n`);
+    await updateStatus({ state: "stopping", step: "stop requested" });
     await notify(`Stop requested for ${targetRepo} in ${workspacePath}`);
     return;
   }
 
   if (actionCommand === "models") {
+    await updateStatus({ state: "running", step: "listing models" });
     const models = await run(agyCommand, ["models"], { cwd: workspacePath, reject: false });
+    await updateStatus({ state: models.code === 0 ? "complete" : "failed", step: "models complete" });
     await notify(models.code === 0 ? `Available Antigravity models:\n${models.output.trim()}` : `Could not read models:\n${models.output.trim()}`);
     return;
   }
 
   if (actionCommand === "quota") {
+    await updateStatus({ state: "running", step: "probing quota support" });
     const models = await run(agyCommand, ["models"], { cwd: workspacePath, reject: false });
+    await updateStatus({ state: "complete", step: "quota probe complete" });
     await notify(
       [
         "Antigravity CLI does not currently expose a quota/usage command in this install.",
@@ -48,6 +68,7 @@ async function main() {
   }
 
   if (existsSync(stopFile)) unlinkSync(stopFile);
+  await updateStatus({ state: "running", step: "run started" });
   await notify(
     [
       "Agent run started",
@@ -58,28 +79,42 @@ async function main() {
       `max iterations: ${maxIterations}`
     ].join("\n")
   );
+  await updateStatus({ step: "preparing repository" });
   await notify("Preparing repository...");
   await prepareRepository();
+  await updateStatus({ step: "repository ready" });
   await notify("Repository ready. Starting autonomous loop.");
 
   let lastVerification = "";
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     if (existsSync(stopFile)) {
+      await updateStatus({ state: "stopped", iteration, step: "stopped by .agent-stop" });
       await notify(`Stopped before iteration ${iteration} because .agent-stop exists.`);
       return;
     }
 
     console.log(`\n=== Iteration ${iteration}/${maxIterations} ===`);
+    await updateStatus({ iteration, step: "running Antigravity" });
     await notify(`Iteration ${iteration}/${maxIterations}: running Antigravity...`);
     await runAntigravity(iteration, lastVerification);
+    await updateStatus({ iteration, step: "running verification" });
     await notify(`Iteration ${iteration}/${maxIterations}: Antigravity finished. Running verification...`);
 
     const verification = await verifyNextProject(iteration);
     lastVerification = verification.output.slice(-12000);
 
     if (verification.ok) {
+      await updateStatus({ iteration, step: "capturing screenshot", last_verification: "checks passed" });
+      await captureAndSendScreenshot();
+      await updateStatus({ iteration, step: "committing and pushing", last_verification: "checks passed" });
       await notify(`Iteration ${iteration}/${maxIterations}: checks passed. Committing and pushing...`);
       const committed = await commitAndPush(iteration);
+      await updateStatus({
+        state: "complete",
+        iteration,
+        step: committed ? "pushed" : "complete with no changes",
+        last_verification: "checks passed"
+      });
       await notify(
         committed
           ? [
@@ -99,6 +134,11 @@ async function main() {
     }
 
     console.log(lastVerification);
+    await updateStatus({
+      iteration,
+      step: "verification failed",
+      last_verification: verification.summary || "checks failed"
+    });
     await notify(
       [
         `Iteration ${iteration}/${maxIterations}: checks failed.`,
@@ -242,13 +282,16 @@ async function verifyNextProject(iteration) {
   let output = "";
   for (const [command, args] of commands) {
     const label = `${command} ${args.join(" ")}`;
+    await updateStatus({ iteration, step: `verifying ${label}`, last_verification: label });
     await notify(`Iteration ${iteration}/${maxIterations}: verifying \`${label}\`...`);
     const result = await run(command, args, { cwd: workspacePath, reject: false });
     output += `\n$ ${label}\n${result.output}\n`;
     if (result.code !== 0) {
+      await updateStatus({ iteration, step: "verification failed", last_verification: `${label} failed` });
       await notify(`Iteration ${iteration}/${maxIterations}: \`${label}\` failed.`);
       return { ok: false, output, summary: `${label} failed` };
     }
+    await updateStatus({ iteration, step: `passed ${label}`, last_verification: `${label} passed` });
     await notify(`Iteration ${iteration}/${maxIterations}: \`${label}\` passed.`);
   }
 
@@ -303,10 +346,10 @@ function run(command, args, options = {}) {
 }
 
 function normalizeCommand(command, args) {
-  if (process.platform === "win32" && command === "npm") {
+  if (process.platform === "win32" && (command === "npm" || command === "npx")) {
     return {
       command: process.env.ComSpec || "cmd.exe",
-      args: ["/d", "/c", ["npm", ...args].map(quoteCmdArg).join(" ")]
+      args: ["/d", "/c", [command, ...args].map(quoteCmdArg).join(" ")]
     };
   }
 
@@ -317,6 +360,128 @@ function quoteCmdArg(value) {
   const text = String(value);
   if (/^[\w:./-]+$/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+async function captureAndSendScreenshot() {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+
+  const packageJsonPath = resolve(workspacePath, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  if (!packageJson.scripts?.start) {
+    await notify("Screenshot skipped: package.json has no start script.");
+    return;
+  }
+
+  const port = String(4300 + Math.floor(Math.random() * 1000));
+  const previewDir = resolve(workspacePath, ".agent-preview");
+  const screenshotPath = resolve(previewDir, "homepage.png");
+  mkdirSync(previewDir, { recursive: true });
+
+  let server;
+  try {
+    await notify("Starting local Next.js server for screenshot...");
+    server = startProcess("npm", ["run", "start", "--", "--hostname", "127.0.0.1", "-p", port], { cwd: workspacePath });
+    await waitForUrl(`http://127.0.0.1:${port}`, 90000);
+
+    await notify("Capturing homepage screenshot...");
+    await run("npx", ["-y", "playwright@latest", "install", "chromium"], { cwd: workspacePath, reject: false });
+    const result = await run(
+      "npx",
+      ["-y", "playwright@latest", "screenshot", "--browser=chromium", "--wait-for-timeout=1000", `http://127.0.0.1:${port}`, screenshotPath],
+      { cwd: workspacePath, reject: false }
+    );
+
+    if (result.code !== 0 || !existsSync(screenshotPath)) {
+      await notify("Screenshot skipped: Playwright capture failed.");
+      return;
+    }
+
+    await sendPhoto(screenshotPath, `Latest homepage preview for ${targetRepo} on ${targetBranch}`);
+  } catch (error) {
+    await notify(`Screenshot skipped: ${error.message}`);
+  } finally {
+    if (server) await killProcessTree(server);
+    if (existsSync(screenshotPath)) unlinkSync(screenshotPath);
+  }
+}
+
+function startProcess(command, args, options = {}) {
+  const normalized = normalizeCommand(command, args);
+  const child = spawn(normalized.command, normalized.args, { cwd: options.cwd || process.cwd(), shell: false });
+  child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+  child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+  return child;
+}
+
+async function waitForUrl(url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return;
+    } catch {
+      // Server is still starting.
+    }
+    await sleep(1000);
+  }
+
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
+function sleep(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+async function killProcessTree(child) {
+  if (!child.pid) return;
+
+  if (process.platform === "win32") {
+    await run("taskkill", ["/pid", String(child.pid), "/t", "/f"], { reject: false });
+  } else {
+    child.kill("SIGTERM");
+  }
+}
+
+async function sendPhoto(filePath, caption) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+
+  const form = new FormData();
+  form.set("chat_id", env.TELEGRAM_CHAT_ID);
+  form.set("caption", caption.slice(0, 1000));
+  form.set("photo", new Blob([readFileSync(filePath)], { type: "image/png" }), "homepage.png");
+
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: "POST",
+      body: form
+    });
+  } catch (error) {
+    console.warn(`Telegram screenshot failed: ${error.message}`);
+  }
+}
+
+async function updateStatus(partial) {
+  Object.assign(runState, partial, { updated_at: new Date().toISOString() });
+
+  if (!env.STATUS_UPDATE_URL || !env.STATUS_UPDATE_TOKEN) return;
+
+  try {
+    await fetch(env.STATUS_UPDATE_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.STATUS_UPDATE_TOKEN}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(runState)
+    });
+  } catch (error) {
+    console.warn(`Status update failed: ${error.message}`);
+  }
+}
+
+function workflowUrl() {
+  if (!env.GITHUB_SERVER_URL || !env.GITHUB_REPOSITORY || !env.GITHUB_RUN_ID) return "";
+  return `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
 }
 
 async function notify(message) {

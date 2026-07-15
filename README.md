@@ -73,6 +73,19 @@ Value: C:\Users\shrid\OneDrive\Documents\agent-space
 
 All workflow `workspace_path` values must be inside `AGENT_ALLOWED_ROOT`.
 
+For rich `/status`, add the status endpoint and shared token:
+
+```text
+Settings -> Secrets and variables -> Actions -> Secrets
+Name: STATUS_UPDATE_TOKEN
+
+Settings -> Secrets and variables -> Actions -> Variables
+Name: STATUS_UPDATE_URL
+Value: https://<worker-url>/status-update
+```
+
+Use the same `STATUS_UPDATE_TOKEN` value for the GitHub secret and Cloudflare Worker secret.
+
 ## Local Smoke Test
 
 Run from the automation repository:
@@ -185,6 +198,21 @@ Add Worker secrets:
 wrangler secret put TELEGRAM_BOT_TOKEN
 wrangler secret put TELEGRAM_ALLOWED_USER_ID
 wrangler secret put GITHUB_TOKEN
+wrangler secret put STATUS_UPDATE_TOKEN
+```
+
+Optional: create a KV namespace for rich `/status` storage:
+
+```bash
+wrangler kv namespace create STATUS_KV
+```
+
+Add the generated binding to `cloudflare-worker/wrangler.toml`:
+
+```toml
+[[kv_namespaces]]
+binding = "STATUS_KV"
+id = "<namespace-id>"
 ```
 
 Deploy:
@@ -244,6 +272,8 @@ Check recent workflow runs:
 /status
 ```
 
+When `STATUS_KV`, `STATUS_UPDATE_URL`, and `STATUS_UPDATE_TOKEN` are configured, `/status` reports the active run state, repository, branch, model, iteration, and last verification step. Without KV, `/status` falls back to recent GitHub Actions runs.
+
 List Antigravity models from the self-hosted runner:
 
 ```text
@@ -268,6 +298,8 @@ During a run, the controller sends Telegram updates for:
 - each verification command;
 - commit and push;
 - final completion or failure.
+
+After successful verification, the controller attempts to start the built Next.js app, capture the homepage with Playwright, and send the screenshot to Telegram. Screenshot capture is best-effort; failure to capture a screenshot does not block commit or push.
 
 ## Workspace Behavior
 

@@ -8,6 +8,10 @@ export default {
         return text("maagy telegram agent is running");
       }
 
+      if (request.method === "POST" && url.pathname === "/status-update") {
+        return handleStatusUpdate(request, env);
+      }
+
       if (request.method !== "POST" || url.pathname !== "/telegram") {
         return text("not found", 404);
       }
@@ -30,8 +34,7 @@ export default {
       }
 
       if (textValue.startsWith("/status")) {
-        const runs = await getWorkflowStatus(env);
-        await sendTelegram(env, chatId, runs);
+        await sendTelegram(env, chatId, await getStatus(env));
         return json({ ok: true });
       }
 
@@ -198,6 +201,51 @@ async function getWorkflowStatus(env) {
     .join("\n\n");
 }
 
+async function getStatus(env) {
+  if (env.STATUS_KV) {
+    const stored = await env.STATUS_KV.get("latest", "json");
+    if (stored) return formatStoredStatus(stored);
+  }
+
+  return getWorkflowStatus(env);
+}
+
+async function handleStatusUpdate(request, env) {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!env.STATUS_UPDATE_TOKEN || token !== env.STATUS_UPDATE_TOKEN) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+
+  const status = await request.json();
+  status.updated_at = new Date().toISOString();
+
+  if (env.STATUS_KV) {
+    await env.STATUS_KV.put("latest", JSON.stringify(status), { expirationTtl: 60 * 60 * 24 * 7 });
+    if (status.run_id) {
+      await env.STATUS_KV.put(`run:${status.run_id}`, JSON.stringify(status), { expirationTtl: 60 * 60 * 24 * 7 });
+    }
+  }
+
+  return json({ ok: true });
+}
+
+function formatStoredStatus(status) {
+  const lines = [
+    `state: ${status.state || "unknown"}`,
+    `repo: ${status.repo || "unknown"}`,
+    `branch: ${status.branch || "unknown"}`,
+    `model: ${status.model || "unknown"}`,
+    `iteration: ${status.iteration || 0}/${status.max_iterations || 0}`,
+    `step: ${status.step || "unknown"}`,
+    `last verification: ${status.last_verification || "none"}`,
+    `updated: ${status.updated_at || "unknown"}`
+  ];
+
+  if (status.workspace) lines.push(`workspace: ${status.workspace}`);
+  if (status.workflow_url) lines.push(status.workflow_url);
+  return lines.join("\n");
+}
+
 async function sendTelegram(env, chatId, textValue) {
   await fetch(`https://api.telegram.org/bot${required(env, "TELEGRAM_BOT_TOKEN")}/sendMessage`, {
     method: "POST",
@@ -218,6 +266,7 @@ function helpText() {
     "/quota",
     "",
     "The agent sends progress updates while it prepares, runs Antigravity, verifies, commits, and pushes.",
+    "Successful frontend builds send a homepage screenshot when Playwright capture is available.",
     "It pushes direct commits to agent-main and stops after checks pass or 5 iterations."
   ].join("\n");
 }

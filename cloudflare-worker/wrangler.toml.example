@@ -8,6 +8,12 @@ preview_urls = true
 # TELEGRAM_BOT_TOKEN
 # TELEGRAM_ALLOWED_USER_ID
 # GITHUB_TOKEN
+# STATUS_UPDATE_TOKEN
+#
+# Optional KV binding for rich /status:
+# [[kv_namespaces]]
+# binding = "STATUS_KV"
+# id = "<namespace-id>"
 #
 # Set these as Cloudflare Worker variables:
 [vars]
