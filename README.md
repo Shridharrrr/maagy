@@ -133,7 +133,7 @@ models
 quota
 ```
 
-Required inputs:
+Required workflow inputs:
 
 ```text
 target_repo      GitHub repository as owner/repo or HTTPS URL
@@ -230,40 +230,30 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<w
 
 ## Telegram Commands
 
-Build with an explicit workspace:
+Build into a named workspace under `DEFAULT_WORKSPACE_ROOT`:
 
 ```text
-/build Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1 | Improve the homepage and keep build passing
+/build Shridharrrr/test1 | telegram-test | Improve the homepage and keep build passing
 ```
 
-Build with the default stable workspace:
+This expands to:
 
 ```text
-/build Shridharrrr/test1 | Improve the homepage and keep build passing
+C:\Users\shrid\OneDrive\Documents\NextJS\agent-space\telegram-test
 ```
 
-When `DEFAULT_WORKSPACE_ROOT` is set, the short form derives a stable folder from the repository name. For example:
-
-```text
-Shridharrrr/test1
-```
-
-uses:
-
-```text
-C:\Users\shrid\OneDrive\Documents\agent-space\Shridharrrr-test1
-```
+The Telegram command requires a workspace name. Use one workspace name per target repository or task. The workspace name must be a single folder name, not an absolute path.
 
 Override model, iterations, or branch:
 
 ```text
-/build Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1 | Add a pricing section | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
+/build Shridharrrr/test1 | telegram-test | Add a pricing section | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
 ```
 
 Stop a run:
 
 ```text
-/stop Shridharrrr/test1 | C:\Users\shrid\OneDrive\Documents\agent-space\test1
+/stop Shridharrrr/test1 | telegram-test
 ```
 
 Check recent workflow runs:
@@ -317,7 +307,7 @@ commit
 push
 ```
 
-Use one workspace per target repository. Do not point different repositories at the same folder.
+Use one workspace per target repository or task. Do not point different repositories at the same workspace name.
 
 ## Safety Limits
 

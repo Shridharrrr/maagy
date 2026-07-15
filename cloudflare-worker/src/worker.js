@@ -52,10 +52,18 @@ export default {
 
       if (textValue.startsWith("/stop")) {
         const parts = parsePipeCommand(textValue.replace("/stop", "").trim());
+        const targetRepo = parts[0] || env.DEFAULT_TARGET_REPO;
+        const workspacePath = workspaceFromTail(env, parts[1]);
+
+        if (!targetRepo || !workspacePath) {
+          await sendTelegram(env, chatId, helpText());
+          return json({ ok: true });
+        }
+
         await dispatchWorkflow(env, withDefaults(env, chatId, {
           command: "stop",
-          target_repo: parts[0] || env.DEFAULT_TARGET_REPO,
-          workspace_path: parts[1] || env.DEFAULT_WORKSPACE_PATH,
+          target_repo: targetRepo,
+          workspace_path: workspacePath,
           prompt: "Stop requested from Telegram"
         }));
         await sendTelegram(env, chatId, "Stop signal dispatched.");
@@ -66,8 +74,8 @@ export default {
         const parts = parsePipeCommand(textValue.replace("/build", "").trim());
         const options = parseOptions(parts.slice(3));
         const targetRepo = parts[0] || env.DEFAULT_TARGET_REPO;
-        const workspacePath = parts.length >= 3 ? parts[1] : workspaceForRepo(env, targetRepo);
-        const prompt = parts.length >= 3 ? parts[2] : parts[1] || "";
+        const workspacePath = workspaceFromTail(env, parts[1]);
+        const prompt = parts[2] || "";
 
         if (!targetRepo || !workspacePath || !prompt) {
           await sendTelegram(env, chatId, helpText());
@@ -124,7 +132,7 @@ function clampIterations(value) {
 function withDefaults(env, chatId, inputs) {
   return {
     target_repo: inputs.target_repo || env.DEFAULT_TARGET_REPO,
-    workspace_path: inputs.workspace_path || workspaceForRepo(env, inputs.target_repo || env.DEFAULT_TARGET_REPO),
+    workspace_path: inputs.workspace_path || env.DEFAULT_WORKSPACE_PATH,
     prompt: inputs.prompt || "",
     max_iterations: inputs.max_iterations || "5",
     branch: inputs.branch || "agent-main",
@@ -134,16 +142,14 @@ function withDefaults(env, chatId, inputs) {
   };
 }
 
-function workspaceForRepo(env, repo) {
-  if (env.DEFAULT_WORKSPACE_ROOT && repo) {
-    const repoName = repo
-      .replace(/^https:\/\/github\.com\//, "")
-      .replace(/\.git$/, "")
-      .replace(/[^\w.-]+/g, "-");
-    return `${env.DEFAULT_WORKSPACE_ROOT}\\${repoName}`;
+function workspaceFromTail(env, tail) {
+  if (!env.DEFAULT_WORKSPACE_ROOT || !tail) return "";
+  if (/^[a-zA-Z]:[\\/]/.test(tail) || tail.includes("/") || tail.includes("\\") || tail.includes("..")) {
+    return "";
   }
 
-  return env.DEFAULT_WORKSPACE_PATH;
+  const safeTail = tail.replace(/[^\w.-]/g, "-");
+  return `${env.DEFAULT_WORKSPACE_ROOT}\\${safeTail}`;
 }
 
 async function dispatchWorkflow(env, inputs) {
@@ -257,14 +263,14 @@ async function sendTelegram(env, chatId, textValue) {
 function helpText() {
   return [
     "Commands:",
-    "/build owner/repo | C:\\path\\to\\empty-folder | prompt",
-    "/build owner/repo | prompt",
-    "/build owner/repo | C:\\path | prompt | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main",
-    "/stop owner/repo | C:\\path\\to\\folder",
+    "/build owner/repo | workspace-name | prompt",
+    "/build owner/repo | workspace-name | prompt | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main",
+    "/stop owner/repo | workspace-name",
     "/status",
     "/models",
     "/quota",
     "",
+    "workspace-name is created under DEFAULT_WORKSPACE_ROOT.",
     "The agent sends progress updates while it prepares, runs Antigravity, verifies, commits, and pushes.",
     "Successful frontend builds send a homepage screenshot when Playwright capture is available.",
     "It pushes direct commits to agent-main and stops after checks pass or 5 iterations."
