@@ -82,14 +82,14 @@ jobs:
             exit 0
           }
 
-          $message = @"
-Workflow finished
-status: $env:AGENT_OUTCOME
-repo: $env:TARGET_REPO
-branch: $env:TARGET_BRANCH
-model: $env:AGY_MODEL
-$env:WORKFLOW_URL
-"@
+          $message = @(
+            "Workflow finished"
+            "status: $env:AGENT_OUTCOME"
+            "repo: $env:TARGET_REPO"
+            "branch: $env:TARGET_BRANCH"
+            "model: $env:AGY_MODEL"
+            "$env:WORKFLOW_URL"
+          ) -join "`n"
           $body = @{
             chat_id = $env:TELEGRAM_CHAT_ID
             text = $message
