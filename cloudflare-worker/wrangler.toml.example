@@ -23,3 +23,5 @@ preview_urls = true
 # DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\AI-Agent-Workspaces\\default"
 # DEFAULT_WORKSPACE_ROOT = "C:\\Users\\shrid\\OneDrive\\Documents\\AI-Agent-Workspaces"
 # DEFAULT_TARGET_REPO = "your-github-user/target-repo"
+# DEFAULT_AGY_MODEL = "Gemini 3.1 Pro (High)"
+# DEFAULT_AGY_FALLBACK_MODELS = "Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low)"

@@ -68,7 +68,7 @@ Add the allowed workspace root:
 ```text
 Settings -> Secrets and variables -> Actions -> Variables
 Name: AGENT_ALLOWED_ROOT
-Value: C:\Users\shrid\OneDrive\Documents\agent-space
+Value: C:\Users\shrid\OneDrive\Documents\NextJS\agent-space
 ```
 
 All workflow `workspace_path` values must be inside `AGENT_ALLOWED_ROOT`.
@@ -103,7 +103,7 @@ After the self-hosted runner is online, run the `Autonomous Agent` workflow manu
 ```text
 command: stop
 target_repo: Shridharrrr/test1
-workspace_path: C:\Users\shrid\OneDrive\Documents\agent-space\smoke
+workspace_path: C:\Users\shrid\OneDrive\Documents\NextJS\agent-space\smoke
 prompt: Stop smoke test
 max_iterations: 5
 branch: agent-main
@@ -113,7 +113,7 @@ agy_model: Gemini 3.1 Pro (High)
 Expected result:
 
 ```text
-C:\Users\shrid\OneDrive\Documents\agent-space\smoke\.agent-stop
+C:\Users\shrid\OneDrive\Documents\NextJS\agent-space\smoke\.agent-stop
 ```
 
 ## Workflow Inputs
@@ -147,6 +147,8 @@ prompt            Build or improvement prompt
 max_iterations    Maximum loop count, capped to 5
 branch            Target branch, defaults to agent-main
 agy_model         Antigravity model, defaults to Gemini 3.1 Pro (High)
+agy_fallback_models
+                  Comma-separated fallback models used when quota is reached
 telegram_chat_id  Chat ID for progress messages
 ```
 
@@ -186,10 +188,11 @@ Configure Worker variables:
 GITHUB_OWNER = "Shridharrrr"
 GITHUB_REPO = "maagy"
 GITHUB_WORKFLOW_FILE = "autonomous-agent.yml"
-DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\agent-space\\telegram-run"
-DEFAULT_WORKSPACE_ROOT = "C:\\Users\\shrid\\OneDrive\\Documents\\agent-space"
+DEFAULT_WORKSPACE_PATH = "C:\\Users\\shrid\\OneDrive\\Documents\\NextJS\\agent-space\\telegram-run"
+DEFAULT_WORKSPACE_ROOT = "C:\\Users\\shrid\\OneDrive\\Documents\\NextJS\\agent-space"
 DEFAULT_TARGET_REPO = "Shridharrrr/test1"
 DEFAULT_AGY_MODEL = "Gemini 3.1 Pro (High)"
+DEFAULT_AGY_FALLBACK_MODELS = "Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low)"
 ```
 
 Add Worker secrets:
@@ -247,7 +250,7 @@ The Telegram command requires a workspace name. Use one workspace name per targe
 Override model, iterations, or branch:
 
 ```text
-/build Shridharrrr/test1 | telegram-test | Add a pricing section | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main
+/build Shridharrrr/test1 | telegram-test | Add a pricing section | model=Gemini 3.1 Pro (High) | fallback=Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium) | iterations=3 | branch=agent-main
 ```
 
 Stop a run:

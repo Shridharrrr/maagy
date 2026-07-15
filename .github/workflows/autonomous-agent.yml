@@ -29,6 +29,10 @@ on:
         description: "Antigravity model display name"
         required: false
         default: "Gemini 3.1 Pro (High)"
+      agy_fallback_models:
+        description: "Comma-separated fallback models when quota is reached"
+        required: false
+        default: "Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low)"
       telegram_chat_id:
         description: "Telegram chat id for run notifications"
         required: false
@@ -57,6 +61,7 @@ jobs:
           MAX_ITERATIONS: ${{ inputs.max_iterations }}
           TARGET_BRANCH: ${{ inputs.branch }}
           AGY_MODEL: ${{ inputs.agy_model }}
+          AGY_FALLBACK_MODELS: ${{ inputs.agy_fallback_models }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id || secrets.TELEGRAM_CHAT_ID }}

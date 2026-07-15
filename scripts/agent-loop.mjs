@@ -9,6 +9,7 @@ const targetBranch = env.TARGET_BRANCH || "agent-main";
 const maxIterations = Math.min(parseInt(env.MAX_ITERATIONS || "5", 10) || 5, 5);
 const agyCommand = env.AGY_COMMAND || "agy";
 const agyModel = env.AGY_MODEL || "Gemini 3.1 Pro (High)";
+const agyFallbackModels = parseFallbackModels(env.AGY_FALLBACK_MODELS);
 const actionCommand = (env.ACTION_COMMAND || "start").toLowerCase();
 const stopFile = resolve(workspacePath, ".agent-stop");
 const runId = env.GITHUB_RUN_ID || `${Date.now()}`;
@@ -75,9 +76,10 @@ async function main() {
       `repo: ${targetRepo}`,
       `branch: ${targetBranch}`,
       `model: ${agyModel}`,
+      agyFallbackModels.length ? `fallbacks: ${agyFallbackModels.join(", ")}` : "",
       `workspace: ${workspacePath}`,
       `max iterations: ${maxIterations}`
-    ].join("\n")
+    ].filter(Boolean).join("\n")
   );
   await updateStatus({ step: "preparing repository" });
   await notify("Preparing repository...");
@@ -241,24 +243,53 @@ async function runAntigravity(iteration, lastVerification) {
     `Iteration: ${iteration}/${maxIterations}`
   ].join("\n");
 
-  const args = [
-    "--add-dir",
-    workspacePath,
-    "--model",
-    agyModel,
-    "--mode",
-    "accept-edits",
-    "--print-timeout",
-    env.AGY_PRINT_TIMEOUT || "45m",
-    "--print",
-    prompt
-  ];
+  const modelsToTry = [agyModel, ...agyFallbackModels.filter((model) => model !== agyModel)];
+  let lastResult = null;
 
-  if ((env.AGY_SKIP_PERMISSIONS || "true").toLowerCase() === "true") {
-    args.unshift("--dangerously-skip-permissions");
+  for (const model of modelsToTry) {
+    await updateStatus({ iteration, step: `running Antigravity with ${model}`, model });
+    if (model !== agyModel) {
+      await notify(`Primary model quota failed. Trying fallback model: ${model}`);
+    }
+
+    const args = [
+      "--add-dir",
+      workspacePath,
+      "--model",
+      model,
+      "--mode",
+      "accept-edits",
+      "--print-timeout",
+      env.AGY_PRINT_TIMEOUT || "45m",
+      "--print",
+      prompt
+    ];
+
+    if ((env.AGY_SKIP_PERMISSIONS || "true").toLowerCase() === "true") {
+      args.unshift("--dangerously-skip-permissions");
+    }
+
+    lastResult = await run(agyCommand, args, { cwd: workspacePath, reject: false });
+    if (lastResult.code === 0) {
+      await updateStatus({ iteration, step: `Antigravity complete with ${model}`, model });
+      return;
+    }
+
+    if (!isQuotaError(lastResult.output)) {
+      throw new Error(`${agyCommand} ${args.join(" ")} exited with ${lastResult.code}`);
+    }
+
+    await notify(`Quota reached for ${model}.`);
   }
 
-  await run(agyCommand, args, { cwd: workspacePath });
+  const resetHint = extractResetHint(lastResult?.output || "");
+  throw new Error(
+    [
+      "Antigravity quota reached for all configured models.",
+      `tried: ${modelsToTry.join(", ")}`,
+      resetHint ? `reset: ${resetHint}` : ""
+    ].filter(Boolean).join("\n")
+  );
 }
 
 async function verifyNextProject(iteration) {
@@ -360,6 +391,23 @@ function quoteCmdArg(value) {
   const text = String(value);
   if (/^[\w:./-]+$/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function parseFallbackModels(value) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+}
+
+function isQuotaError(output) {
+  return /quota reached|subscription.*limits|increase your limits/i.test(output || "");
+}
+
+function extractResetHint(output) {
+  const match = String(output || "").match(/Resets in [^\r\n.]+/i);
+  return match?.[0] || "";
 }
 
 async function captureAndSendScreenshot() {

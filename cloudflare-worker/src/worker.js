@@ -89,7 +89,8 @@ export default {
           prompt,
           max_iterations: clampIterations(options.iterations || options.max_iterations || "5"),
           branch: options.branch || "agent-main",
-          agy_model: options.model || env.DEFAULT_AGY_MODEL || "Gemini 3.1 Pro (High)"
+          agy_model: options.model || env.DEFAULT_AGY_MODEL || "Gemini 3.1 Pro (High)",
+          agy_fallback_models: options.fallback || env.DEFAULT_AGY_FALLBACK_MODELS || "Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low)"
         }));
 
         await sendTelegram(env, chatId, `Started ${options.branch || "agent-main"} run for ${targetRepo} with ${options.model || env.DEFAULT_AGY_MODEL || "Gemini 3.1 Pro (High)"}.`);
@@ -137,6 +138,7 @@ function withDefaults(env, chatId, inputs) {
     max_iterations: inputs.max_iterations || "5",
     branch: inputs.branch || "agent-main",
     agy_model: inputs.agy_model || env.DEFAULT_AGY_MODEL || "Gemini 3.1 Pro (High)",
+    agy_fallback_models: inputs.agy_fallback_models || env.DEFAULT_AGY_FALLBACK_MODELS || "Gemini 3.5 Flash (High),Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low)",
     telegram_chat_id: String(chatId),
     ...inputs
   };
@@ -264,7 +266,7 @@ function helpText() {
   return [
     "Commands:",
     "/build owner/repo | workspace-name | prompt",
-    "/build owner/repo | workspace-name | prompt | model=Gemini 3.5 Flash (High) | iterations=3 | branch=agent-main",
+    "/build owner/repo | workspace-name | prompt | model=Gemini 3.5 Flash (High) | fallback=Gemini 3.5 Flash (Medium),Gemini 3.5 Flash (Low) | iterations=3 | branch=agent-main",
     "/stop owner/repo | workspace-name",
     "/status",
     "/models",
