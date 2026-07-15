@@ -89,8 +89,19 @@ function assertWorkspaceAllowed(path) {
 }
 
 async function prepareRepository() {
+  const cloneUrl = buildCloneUrl(targetRepo);
+  const remoteOk = await exitsZero("git", ["ls-remote", cloneUrl], workspacePath, [env.GITHUB_TOKEN]);
+  if (!remoteOk) {
+    throw new Error(
+      [
+        `Cannot access target repo: ${targetRepo}`,
+        "Check that the repo exists and AGENT_GITHUB_TOKEN has Contents: Read and write access.",
+        "If the repo is private, the token must be allowed for that exact repository."
+      ].join("\n")
+    );
+  }
+
   if (!existsSync(resolve(workspacePath, ".git"))) {
-    const cloneUrl = buildCloneUrl(targetRepo);
     await run("git", ["clone", cloneUrl, "."], { cwd: workspacePath, mask: [env.GITHUB_TOKEN] });
   }
 
@@ -199,8 +210,8 @@ async function commitAndPush(iteration) {
   return true;
 }
 
-async function exitsZero(command, args, cwd) {
-  const result = await run(command, args, { cwd, reject: false });
+async function exitsZero(command, args, cwd, mask = []) {
+  const result = await run(command, args, { cwd, reject: false, mask });
   return result.code === 0;
 }
 
