@@ -77,7 +77,14 @@ function assertWorkspaceAllowed(path) {
 
   const pathFromRoot = relative(allowedRoot, path);
   if (pathFromRoot.startsWith("..") || resolve(pathFromRoot) === pathFromRoot) {
-    throw new Error(`Workspace must be inside AGENT_ALLOWED_ROOT: ${allowedRoot}`);
+    throw new Error(
+      [
+        "Workspace must be inside AGENT_ALLOWED_ROOT.",
+        `AGENT_ALLOWED_ROOT: ${allowedRoot}`,
+        `WORKSPACE_PATH: ${path}`,
+        "Use a workspace path like AGENT_ALLOWED_ROOT\\project-name."
+      ].join("\n")
+    );
   }
 }
 

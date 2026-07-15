@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 240
     steps:
       - name: Checkout automation
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run autonomous loop
         shell: powershell
